@@ -18,7 +18,7 @@ int main(int argc, char * argv[])
 	pipeline = gst_pipeline_new("test-pipeline")
 
 	if (!pipeline || !source || !sink) {
-		g_printer("Not all elements could be created.\n");
+		g_printerr("Not all elements could be created.\n");
 		return -1;
 	}
 
@@ -26,7 +26,7 @@ int main(int argc, char * argv[])
 	/* Build the pipeline */
 	gst_bin_add_many (GST_BIN (pipeline), source, sink, NULL);
 	if (gst_element_link (source, sink) != TRUE) {
-		g_printer("Elements could not be linked.\n");
+		g_printerr("Elements could not be linked.\n");
 		gst_object_unref(pipeline);
 		return -1;
 	}
@@ -38,7 +38,7 @@ int main(int argc, char * argv[])
 	/* Start playing */
 	ret = gst_element_set_state (pipeline, GST_STATE_PLAYING);
 	if (ret == GST_STATE_CHANGE_FAILURE) {
-		g_printer("Unalbe to set the pipeline to the playing state.\n");
+		g_printerr("Unalbe to set the pipeline to the playing state.\n");
 		gst_object_unref(pipeline);
 		return -1;
 	}
@@ -67,7 +67,7 @@ int main(int argc, char * argv[])
 
 			default :
 				/* We should not reach here because we only asked for ERRORs and EOS */
-				g_printer("Unexpected message received.\n");
+				g_printerr("Unexpected message received.\n");
 				break;
 		}
 		gst_message_unref(msg);
