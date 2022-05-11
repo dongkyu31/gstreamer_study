@@ -15,7 +15,7 @@ int main(int argc, char * argv[])
 	sink = gst_element_factory_make("autovideosink", "sink");
 
 	/* Create the empty pipeline */
-	pipeline = gst_pipeline_new("test-pipeline")
+	pipeline = gst_pipeline_new("test-pipeline");
 
 	if (!pipeline || !source || !sink) {
 		g_printerr("Not all elements could be created.\n");
@@ -56,7 +56,7 @@ int main(int argc, char * argv[])
 			case GST_MESSAGE_ERROR:
 				gst_message_parse_error(msg, &err, &debug_info);
 				g_printerr("Error received from element %s: %s\n", GST_OBJECT_NAME(msg->src), err->message);
-				g_printerr("Debugging information:%ㄴ \n", debug_info? debug_info :"none");
+				g_printerr("Debugging information:%s \n", debug_info? debug_info :"none");
 				g_clear_error(&err);
 				g_free(debug_info);
 				break;
