@@ -11,7 +11,7 @@ int main(int argc, char * argv[])
 	gst_init(&argc, &argv);
 
 	/* Create the elements */
-	source = gst_element_factory_make("videtestsrc", "source");
+	source = gst_element_factory_make("videotestsrc", "source");
 	sink = gst_element_factory_make("autovideosink", "sink");
 
 	/* Create the empty pipeline */
