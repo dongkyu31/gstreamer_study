@@ -89,6 +89,9 @@
 #include <gst/gst.h>
 
 /* Functions below print the Capabilities in a human-friendly format */
+/* The print_field, print_caps and print_pad_templates simply display ,in a human-friendly format, the capabilities structures.
+ * If you want to learn about the internal organization of the GstCaps structure, read the GStreamer Documentation regarding Pad Caps.
+ */
 static gboolean print_field(GQuark field, const GValue* value, gpointer pfx) {
 	gchar* str = gst_value_serialize(value);
 
@@ -96,8 +99,6 @@ static gboolean print_field(GQuark field, const GValue* value, gpointer pfx) {
 	g_free(str);
 	return TRUE;
 }
-
-
 
 
 static void print_caps(const GstCaps* caps, const gchar* pfx) {
@@ -117,7 +118,7 @@ static void print_caps(const GstCaps* caps, const gchar* pfx) {
 	for(i=0; i<gst_caps_get_size(caps); i++) {
 		GstStructure* structure = gst_caps_get_structure(caps, i);
 
-		g_print("%s%s\n", pfx, gst_structure_get_name(struecture));
+		g_print("%s%s\n", pfx, gst_structure_get_name(structure));
 		gst_structure_foreach(structure, print_field, (gpointer)pfx);
 	}
 }
@@ -127,7 +128,7 @@ static void print_pad_templates_information(GstElementFactory* factory) {
 	const GList* pads;
 	GstStaticPadTemplate* padtemplate;
 
-	g_print("Pad Templates for %s:\n", gst_elements_factory_get_longname(factory));
+	g_print("Pad Templates for %s:\n", gst_element_factory_get_longname(factory));
 	if(!gst_element_factory_get_num_pad_templates(factory)) {
 		g_print("    none\n");
 		return;
@@ -165,6 +166,39 @@ static void print_pad_templates_information(GstElementFactory* factory) {
 
 }
 
+/* Shows the CURRENT capabilities of the requested pad in the given element */
+static void print_pad_capabilities(GstElement *element, gchar *pad_name) {
+	GstPad *pad = NULL;
+	GstCaps *caps = NULL;
+
+	/* Retrieve pad */
+	// gst_element_get_static_pad() retrieves the named Pad from the given element.
+	// This Pad is static because it is always present in the element.
+	// To know more about Pad availability read the GStreamer documentation about Pads.
+	pad = gst_element_get_static_pad(element, pad_name);
+	if(!pad) {
+		g_printerr("Could not retrieve pad '%s'\n", pad_name);
+		return;
+	}
+
+	/* Retrieve negotiated caps (or acceptable caps if negotiation is not finished yet) */
+	// Then we call gst_pad_get_current_caps() to retrieve the Pad's current Capabilities, which can be fixed or not,
+	// depending on the state of the negotiation process. They could even be non-existent, in which case, we call
+	// gst_pad_query_caps() to retrieve the currently acceptable Pad Capabilities. The currently acceptable Caps will be the 
+	// Pad Template's Caps in the NULL state, but might change in later states, as the actual hardware Capabilities might be queried.
+	caps = gst_pad_get_current_caps(pad);
+	if(!caps) {
+		caps = gst_pad_query_caps(pad, NULL);
+	}
+
+	/* Print and free */
+	g_print("Caps for the %s pad:\n", pad_name);
+	print_caps(caps, "		");
+	gst_caps_unref(caps);
+	gst_object_unref(pad);
+}
+
+
 int main(int argc, char *argv[]) {
 	GstElement *pipeline, *source, *sink;
 	GstElementFactory *source_factory, *sink_factory;
@@ -178,6 +212,15 @@ int main(int argc, char *argv[]) {
 
 
 	/* Create the element factorise */
+	// In the previous tutorials we created the elements directly using gst_element_factory_make() and skipped talking about
+	// factories, but we will do now. A GstElementFactory is in charge of instantiating a particular type of element,
+	// identified by its factory name.
+	// You can use gst_element_factory_find() to create a factory of type "videotestsrc", and then use it to instantiate multiple
+	// "videotestsrc" elements using gst_element_factory_create(). gst_element_factory_make() is really a shortcut for 
+	// gst_element_factory_find() + gst_element_factory_create().
+	//
+	// The Pad Templates can already be accessed through the factories, so they are printed as soon as the factories are created.
+	// We skip the pipeline create and start, and go to the Stete-Changed message handling:
 	source_factory = gst_element_factory_find("audiotestsrc");
 	sink_factory = gst_element_factory_find("autoaudiosink");
 	if(!source_factory || !sink_factory) { 
@@ -185,9 +228,103 @@ int main(int argc, char *argv[]) {
 		return -1;
 	}
 	
+	/* Print information about the pad templates of these factories */
+	print_pad_templates_information(source_factory);
+	print_pad_templates_information(sink_factory);
+
+	/* Ask the factories to instantiates actual elements */
+	source = gst_element_factory_create(source_factory, "source");
+	sink = gst_element_factory_create(sink_factory, "sink");
+
+	/* Create the empty pipeline */
+	pipeline = gst_pipeline_new("test-pipeline");
+
+	if(!pipeline || !source || !sink) {
+		g_printerr("Not all elements could be create.\n");
+		return -1;
+	}
+
+	/* Build the pipeline */
+	gst_bin_add_many(GST_BIN(pipeline), source, sink, NULL);
+	if(gst_element_link(source, sink) != TRUE) {
+		g_printerr("Elements could not be linked. \n");
+		gst_object_unref(pipeline);
+		return -1;
+	}
+
+	/* Print initial negotiated caps(in NULL state) */
+	g_print("In NULL state: \n");
+	print_pad_capabilities(sink, "sink");
+
+	/* Start playing */
+	ret = gst_element_set_state(pipeline, GST_STATE_PLAYING);
+	if (ret == GST_STATE_CHANGE_FAILURE) {
+		g_printerr("Unable to set the pipeline to the playing state (check the bus for error messages).\n");
+	}
+
+	/* Wait until error, EOS or State Change */
+	bus = gst_element_get_bus(pipeline);
+	do {
+		msg = gst_bus_timed_pop_filtered(bus, GST_CLOCK_TIME_NONE, GST_MESSAGE_ERROR | GST_MESSAGE_EOS | GST_MESSAGE_STATE_CHANGED);
+
+		/* Parse message */
+		if (msg != NULL) {
+			GError *err;
+			gchar *debug_info;
+
+			switch (GST_MESSAGE_TYPE(msg)) {
+				case GST_MESSAGE_ERROR:
+					gst_message_parse_error(msg, &err, &debug_info);
+					g_printerr("Error received from element %s: %s \n", GST_OBJECT_NAME(msg->src), err->message);
+					g_clear_error(&err);
+					g_free(debug_info);
+					terminate = TRUE;
+					break;
+				case GST_MESSAGE_EOS:
+					g_print("End-Of-Stream reached.\n");
+					terminate = TRUE;
+					break;
+				case GST_MESSAGE_STATE_CHANGED:
+					/* We are only interested in state-changed messages from the pipeline */
+					if(GST_MESSAGE_SRC(msg) == GST_OBJECT(pipeline)) {
+						GstState old_state, new_state, pending_state;
+						gst_message_parse_state_changed(msg, &old_state, &new_state, &pending_state);
+						g_print("\nPipeline state changed from %s to %s:\n", 
+							gst_element_state_get_name(old_state), gst_element_state_get_name(new_state));
+						/* Print the current capabilities of the sink element */
+						print_pad_capabilities(sink, "sink");
+					}
+					break;
+				default:
+					/* We should not reach here because we only asked for ERRORs, EOS and STATE_CHANGED */
+					g_printerr("Unexpected message received.\n");
+					break;
+			}
+			gst_message_unref(msg);
+		}
+	} while(!terminate);
+
+	/* Free resources */
+	gst_object_unref(bus);
+	gst_element_set_state(pipeline, GST_STATE_NULL);
+	gst_object_unref(pipeline);
+	gst_object_unref(source_factory);
+	gst_object_unref(sink_factory);
+	return 0;
 
 }
 
 
 
-
+/*
+ * Conclusion
+ *
+ * This tutorial has shown : 
+ *   - What are Pad Capabilities and Pad Template Capabilities.
+ *   - How to retrieve them with gst_pad_current_caps() or gst_pad_query_caps().
+ *   - That they have different meaning depending on the state of the pipeline (initially they indicate all the possible Capabilities,
+ *       later they indicate the currently engotiated Caps for Pad).
+ *   - That Pad Caps are important to know beforehand if two elements can be linked together.
+ *   - That Pad Caps can be found using the gst-inspect-1.0 tool described int Basic-tutorial 10: GStreamer tools.
+ *
+ */
