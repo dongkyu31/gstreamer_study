@@ -98,7 +98,16 @@ int main(int argc, char *argv[]) {
 	g_object_set(audio_source, "freq", 215.0f, NULL);
 	g_object_set(visual, "shader", 0, "style", 1, NULL);
 
-
+	/* Link all elements that can be automatically linked because they because they have "Always" pads */
+	gst_bin_add_many (GST_BIN (pipeline), audio_source, tee, audio_queue, audio_convert, audio_resample, audio_sink,
+			video_queue, visual, video_convert, video_sink, NULL);
+	if (gst_element_link_many (audio_source, tee, NULL) != TRUE ||
+			gst_element_link_many (audio_queue, audio_convert, audio_resample, audio_sink, NULL) != TRUE ||
+			gst_element_link_many (video_queue, visual, video_convert, video_sink, NULL) != TRUE) {
+		g_printerr ("Elements could not be linked.\n");
+		gst_object_unref (pipeline);
+		return -1;
+	}
 
 
 }
