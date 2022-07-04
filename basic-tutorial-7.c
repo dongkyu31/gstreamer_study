@@ -30,6 +30,11 @@
  * 
  * This example builds the following pipeline:
  * https://gstreamer.freedesktop.org/documentation/tutorials/basic/images/tutorials/basic-tutorial-7.png
+ * ------------------
+ * | App source      |
+ * |            |sink|
+ * |                 |
+ * ------------------
  *
  * The source is a synthetic audio signal (a continuous tone) which is split using a tee element (it sends through its source pads everything
  * it recieves through its sink pad). One branch then sends the signal to the audio card, and the other renders a video of the waveform
@@ -125,6 +130,26 @@ int main(int argc, char *argv[]) {
 	gst_object_unref (queue_audio_pad);
 	gst_object_unref (queue_video_pad);
 
+	/* Start playing the pipeline */
+	gst_element_set_state (pipeline, GST_STATE_PLAYING);
 
+	/* Wait until error or EOS */
+	bus = gst_element_get_bus (pipeline);
+	msg = gst_bus_timed_pop_filtered (bus, GST_CLOCK_TIME_NONE, GST_MESSAGE_ERROR | GST_MESSAGE_EOS);
 
+	/* Release the request pads from the Tee, and unref them */
+	gst_element_release_request_pad (tee, tee_audio_pad);
+	gst_element_release_request_pad (tee, tee_video_pad);
+	gst_object_unref (tee_audio_pad);
+	gst_object_unref (tee_video_pad);
+
+	/* Free resources */
+	if (msg != NULL)
+		gst_message_unref (msg);
+	gst_object_unref (bus);
+	gst_element_set_state (pipeline, GST_STATE_NULL);
+
+	gst_object_unref (pipeline);
+
+	return 0;
 }
