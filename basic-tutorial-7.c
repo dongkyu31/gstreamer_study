@@ -30,11 +30,21 @@
  * 
  * This example builds the following pipeline:
  * https://gstreamer.freedesktop.org/documentation/tutorials/basic/images/tutorials/basic-tutorial-7.png
- * ------------------
- * | App source      |
- * |            |sink|
- * |                 |
- * ------------------
+ *
+ *            |<-- Thread 1 ------------------------------->|<--- Thread 2 -------------------------------------------->|
+ *                                                ----------------     ----------------     ----------------     ----------------
+ *                                                |Queue         |     |Audio convert |     |Audio resample|     |Audio sink    |
+ *                                            --->|sink|     |src| --> |sink|     |src| --> |sink|     |src| --> |sink|         |
+ * -------------------    ------------------  |   |              |     |              |     |              |     |              |
+ * | App source      |    |Tee         |src|---   ----------------     ----------------     ----------------     ----------------
+ * |            |sink|--> |sink|           |   
+ * |                 |    |            |src|--    ----------------     ----------------     ----------------     ----------------  
+ * -------------------    ------------------  |   |Queue         |     |Wave scope    |     |Video convert |     |Video sink    |
+ *                                            --->|sink|     |src| --> |sink|     |src| --> |sink|     |src| --> |sink|         |
+ *                                                |              |     |              |     |              |     |              |
+ *                                                ----------------     ----------------     ----------------     ----------------
+ *                                                          |<--- Thread 3 -------------------------------------------->|
+ *
  *
  * The source is a synthetic audio signal (a continuous tone) which is split using a tee element (it sends through its source pads everything
  * it recieves through its sink pad). One branch then sends the signal to the audio card, and the other renders a video of the waveform
